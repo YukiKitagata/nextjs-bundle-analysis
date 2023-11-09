@@ -26,8 +26,27 @@ try {
   process.exit(1)
 }
 
+const pagesManifestFilePath = path.join(nextMetaRoot, 'build-manifest.json');
+const appManifestFilePath = path.join(nextMetaRoot, 'app-build-manifest.json');
+
+// for backwards compatibility, we check to see if the app directory build manifest exists
+const hasAppDirectory = (() => {
+  try {
+    fs.accessSync(appManifestFilePath, fs.constants.R_OK);
+    return true
+  } catch (err) {
+    return false
+  }
+})();
+
 // if so, we can import the build manifest
-const buildMeta = require(path.join(nextMetaRoot, 'build-manifest.json'))
+const buildMetaPages = [
+  require(pagesManifestFilePath),
+  hasAppDirectory ? require(appManifestFilePath) : {},
+].map((manifest) => manifest.pages).reduce((acc, pages) => ({
+  ...acc,
+  ...pages,
+}), {});
 
 // this memory cache ensures we dont read any script file more than once
 // bundles are often shared between pages
@@ -35,14 +54,14 @@ const memoryCache = {}
 
 // since _app is the template that all other pages are rendered into,
 // every page must load its scripts. we'll measure its size here
-const globalBundle = buildMeta.pages['/_app']
+const globalBundle = buildMetaPages['/_app']
 const globalBundleSizes = getScriptSizes(globalBundle)
 
 // next, we calculate the size of each page's scripts, after
 // subtracting out the global scripts
-const allPageSizes = Object.values(buildMeta.pages).reduce(
+const allPageSizes = Object.values(buildMetaPages).reduce(
   (acc, scriptPaths, i) => {
-    const pagePath = Object.keys(buildMeta.pages)[i]
+    const pagePath = Object.keys(buildMetaPages)[i]
     const scriptSizes = getScriptSizes(
       scriptPaths.filter((scriptPath) => !globalBundle.includes(scriptPath))
     )
